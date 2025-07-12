@@ -11,5 +11,5 @@
     <node pkg="rviz2" exec="rviz2" output="screen" args="-d $(var rviz_path)"/>
 
      <!-- ¡NUEVO! Agrega tu nodo de trayectoria aquí -->
-    <node pkg="mi_pkg_python" exec="trayectoria" output="screen"/>
+    <node pkg="robot_movil" exec="trayectoria" output="screen"/>
 </launch>
