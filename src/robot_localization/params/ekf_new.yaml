@@ -1,0 +1,45 @@
+ekf_filter_node:
+    ros__parameters:
+        frequency: 10.0
+        two_d_mode: true
+        publish_tf: true
+ 
+        map_frame: map             
+        odom_frame: odom            
+        base_link_frame: base_footprint 
+        world_frame: odom 
+
+        #x     , y     , z,
+        #roll  , pitch , yaw,
+        #vx    , vy    , vz,
+        #vroll , vpitch, vyaw,
+        #ax    , ay    , az
+        odom0: /odom/unfiltered
+        odom0_config: [true, true, false,
+                       false, false, false,
+                       true, false, false,
+                       false, false, true,
+                       false, false, false]
+
+        #odom0_config: [false, false, false,
+                       #false, false, false,
+                       #true, true, false,
+                       #false, false, true,
+                       #false, false, false]s
+
+        #        [x_pos   , y_pos    , z_pos,
+        #         roll    , pitch    , yaw,
+        #         x_vel   , y_vel    , z_vel,
+        #         roll_vel, pitch_vel, yaw_vel,
+        #         x_accel , y_accel  , z_accel]
+        imu0: /imu/unfiltered
+        imu0_config: [false, false, false, # x y z posición -> NO usados
+              false,  false,  true,   # roll, pitch, yaw (orientación)
+              false, false, false,  # x y z velocidad lineal -> NO usados
+              false,  false,  true,   # velocidad angular (gyros)
+              true,  false,  false]   # aceleración lineal (accel + gravedad)
+        imu0_remove_gravitational_acceleration: true
+        imu0_differential: false
+        imu0_queue_size: 5
+        imu0_nodelay: false
+        

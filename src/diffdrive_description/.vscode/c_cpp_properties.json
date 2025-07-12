@@ -1,0 +1,30 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/raynel/ros2_ws/install/teleop_twist_joy/include/**",
+        "/home/raynel/ros2_ws/install/robot_localization/include/**",
+        "/home/raynel/ros2_ws/install/micro_ros_agent/include/**",
+        "/home/raynel/ros2_ws/install/avig_msg/include/**",
+        "/opt/ros/humble/include/**",
+        "/home/raynel/ros2_ws/src/avig_msg/include/**",
+        "/home/raynel/ros2_ws/src/micro-ROS-Agent/micro_ros_agent/include/**",
+        "/home/raynel/ros2_ws/src/robot_car_v1/include/**",
+        "/home/raynel/ros2_ws/src/robot_localization/include/**",
+        "/home/raynel/ros2_ws/src/teleop_twist_joy/include/**",
+        "/home/raynel/ros2_ws/src/tuto_youtube/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}
