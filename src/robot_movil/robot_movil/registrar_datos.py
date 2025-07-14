@@ -19,7 +19,7 @@ class DataLogger(Node):
         # Abrir el archivo CSV
         self.csv_file = open(csv_path, 'w', newline='')
         self.csv_writer = csv.writer(self.csv_file)
-        self.csv_writer.writerow(['x', 'y', 'yaw', 'linear_vel', 'angular_vel'])
+        self.csv_writer.writerow(['time', 'x', 'y', 'yaw', 'linear_vel', 'angular_vel'])
 
         # Suscripción a la odometría
         self.subscription = self.create_subscription(
@@ -44,8 +44,10 @@ class DataLogger(Node):
         linear_vel = msg.twist.twist.linear.x
         angular_vel = msg.twist.twist.angular.z
 
+        t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+
         # Escribir en CSV
-        self.csv_writer.writerow([x, y, yaw, linear_vel, angular_vel])
+        self.csv_writer.writerow([t, x, y, yaw, linear_vel, angular_vel])
 
     def destroy_node(self):
         self.csv_file.close()

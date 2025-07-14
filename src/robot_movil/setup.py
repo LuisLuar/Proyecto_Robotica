@@ -24,6 +24,7 @@ setup(
             'cuadrado = robot_movil.circle_reference:main',
             'trayectoria = robot_movil.trayectoria:main',
             'guardar = robot_movil.registrar_datos:main',
+            'puentebt = robot_movil.puente_BT:main',
         ],
     },
 )
