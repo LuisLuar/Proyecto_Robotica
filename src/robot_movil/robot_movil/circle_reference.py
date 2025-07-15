@@ -21,17 +21,17 @@ class SquareTrajectoryController(Node):
         self.declare_parameters(
             namespace='',
             parameters=[
-                ('k_linear', 0.2),  # Ganancia para control lineal
+                ('k_linear', 0.3),  # Ganancia para control lineal
                 ('k_angular', 0.5),  # Ganancia para control angular
-                ('max_linear_speed', 0.2),  # Velocidad lineal máxima (m/s)
-                ('max_angular_speed', 0.8),  # Velocidad angular máxima (rad/s)
+                ('max_linear_speed', 0.7),  # Velocidad lineal máxima (m/s)
+                ('max_angular_speed', 0.9),  # Velocidad angular máxima (rad/s)
                 ('slowdown_radius', 0.3),  # Radio para comenzar a frenar (m)
                 ('goal_tolerance', 0.05),  # Tolerancia para considerar objetivo alcanzado (m)
                 #('min_distance', 0.05),  # Distancia mínima para considerar obstáculo
                 ('initial_angle_tolerance', 0.05),  # ~22.5°
                 ('final_angle_tolerance', np.pi/8),        # ~2.86°
-                ('wait_time_between_goals', 0.5),  # Tiempo de espera entre objetivos (s)
-                ('wait_after_orientation', 0.5),  # Tiempo de espera después de alineación (s)
+                ('wait_time_between_goals', 1),  # Tiempo de espera entre objetivos (s)
+                ('wait_after_orientation', 1),  # Tiempo de espera después de alineación (s)
                 ('mission_repetitions', 1)  # Veces que se repetirá la trayectoria
             ]
         )
@@ -51,8 +51,8 @@ class SquareTrajectoryController(Node):
         # Lista de objetivos [x, y, theta] que forman un cuadrado
         self.goals = [
             [1.0, 0.0, 0.0],        # Vértice 1: frente, orientación 0
-            [1.0, 1.0, np.pi / 2],  # Vértice 2: derecha, orientación 90°
-            [0.0, 1.0, np.pi],      # Vértice 3: atrás, orientación 180°
+            [1.0, 1.05, np.pi / 2],  # Vértice 2: derecha, orientación 90°
+            [0.0, 1.05, np.pi],      # Vértice 3: atrás, orientación 180°
             [0.0, 0.0, 3 * np.pi / 2] # Vértice 4: izquierda, orientación 270°
         ]
 
