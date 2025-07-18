@@ -1,0 +1,8 @@
+# Request
+int32 q1
+int32 q2
+int32 q3
+bool efector
+---
+# Response
+bool success
