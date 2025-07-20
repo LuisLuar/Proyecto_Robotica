@@ -1,7 +1,12 @@
 <?xml version="1.0"?>
 <robot name="Nav2bot" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-    <xacro:include filename="common_properties.xacro"/>
-    <xacro:include filename="mobile_base.xacro"/>
+
+    <!-- Define el tf_prefix para este robot -->
+    <xacro:property name="tf_prefix" value=""/>
+
+    <!-- Incluye propiedades y base -->
+    <xacro:include filename="$(find diffdrive_description)/urdf/common_properties.xacro"/>
+    <xacro:include filename="$(find diffdrive_description)/urdf/mobile_base.xacro"/>
    
 </robot>
