@@ -1,0 +1,3 @@
+# Solicitud del usuario desde GUI o consola
+---
+string robot_namespace  # ej: "robot1" o "robot2"

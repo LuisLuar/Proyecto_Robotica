@@ -1,0 +1,33 @@
+digraph pastafarianism {
+ordering=out;
+graph [fontname="times-roman"];
+node [fontname="times-roman"];
+edge [fontname="times-roman"];
+RepeatRoot [fillcolor=ghostwhite, fontcolor=black, fontsize=9, label=RepeatRoot, shape=ellipse, style=filled];
+MainSequence [fillcolor=orange, fontcolor=black, fontsize=9, label="Ⓜ MainSequence", shape=box, style=filled];
+RepeatRoot -> MainSequence;
+SeleccionarRobot [fillcolor=gray, fontcolor=black, fontsize=9, label=SeleccionarRobot, shape=ellipse, style=filled];
+MainSequence -> SeleccionarRobot;
+ObtenerCoordenadas [fillcolor=gray, fontcolor=black, fontsize=9, label=ObtenerCoordenadas, shape=ellipse, style=filled];
+MainSequence -> ObtenerCoordenadas;
+NavegarHaciaDestino [fillcolor=gray, fontcolor=black, fontsize=9, label=NavegarHaciaDestino, shape=ellipse, style=filled];
+MainSequence -> NavegarHaciaDestino;
+DetectarObjeto [fillcolor=gray, fontcolor=black, fontsize=9, label=DetectarObjeto, shape=ellipse, style=filled];
+MainSequence -> DetectarObjeto;
+Grasp [fillcolor=gray, fontcolor=black, fontsize=9, label=Grasp, shape=ellipse, style=filled];
+MainSequence -> Grasp;
+SafePos [fillcolor=gray, fontcolor=black, fontsize=9, label=SafePos, shape=ellipse, style=filled];
+MainSequence -> SafePos;
+"ObtenerCoordenadas*" [fillcolor=gray, fontcolor=black, fontsize=9, label="ObtenerCoordenadas*", shape=ellipse, style=filled];
+MainSequence -> "ObtenerCoordenadas*";
+"NavegarHaciaDestino*" [fillcolor=gray, fontcolor=black, fontsize=9, label="NavegarHaciaDestino*", shape=ellipse, style=filled];
+MainSequence -> "NavegarHaciaDestino*";
+Release [fillcolor=gray, fontcolor=black, fontsize=9, label=Release, shape=ellipse, style=filled];
+MainSequence -> Release;
+"SafePos*" [fillcolor=gray, fontcolor=black, fontsize=9, label="SafePos*", shape=ellipse, style=filled];
+MainSequence -> "SafePos*";
+"ObtenerCoordenadas**" [fillcolor=gray, fontcolor=black, fontsize=9, label="ObtenerCoordenadas**", shape=ellipse, style=filled];
+MainSequence -> "ObtenerCoordenadas**";
+"NavegarHaciaDestino**" [fillcolor=gray, fontcolor=black, fontsize=9, label="NavegarHaciaDestino**", shape=ellipse, style=filled];
+MainSequence -> "NavegarHaciaDestino**";
+}

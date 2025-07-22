@@ -15,6 +15,7 @@ find_package(builtin_interfaces REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/MoveRobot.srv"
+  "srv/ElegirRobot.srv"
   DEPENDENCIES builtin_interfaces
 )
 
