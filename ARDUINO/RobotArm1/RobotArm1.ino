@@ -13,10 +13,6 @@
 #include <ESP32Servo.h>
 
 //____________INTERNET_________________
-/*const char* ssid = "Fastnett-Fibra-ConstructoraVasqu";
-  const char* password = "1706312434";
-  const char* agent_ip = "192.168.100.192";  // ← IP de tu PC (donde corre el agent)*/
-
 const char* ssid = "Latitude3490";
 const char* password = "12345678";
 const char* agent_ip = "10.42.0.1";  // ← IP de tu PC (donde corre el agent)
@@ -90,6 +86,8 @@ void error_loop() {
   }
 }
 //_________________________
+
+
 
 void setup() {
   pinMode(led_error, OUTPUT);
@@ -165,15 +163,15 @@ void setup() {
   pinMode(FC1, INPUT); pinMode(FC2, INPUT); pinMode(FC3, INPUT); pinMode(FC4, INPUT);
   pinMode(Step, OUTPUT); pinMode(Dir, OUTPUT); pinMode(Enable, OUTPUT);
   pinMode(Step2, OUTPUT); pinMode(Dir2, OUTPUT); pinMode(Enable2, OUTPUT);
-  miServo.attach(pinServo);
+  miServo.attach(pinServo, 600, 2400); // Pin, µs mínimo, µs máximo
+  //miServo.attach(pinServo);
   pinMode(iman, OUTPUT);
+  
+  // Posición home
+  //home();
 
   Serial.println("CORRECTO Y FUNCIONANDO");
   digitalWrite(led_error, LOW);
-
-
-  // Posición home
-  home();
 }
 
 void loop() {
@@ -240,6 +238,12 @@ void subscription_callback(const void *msg_in)
       q1 = 0;
     }
 
+    if (q1 != q1a) {
+      q1a = q1;
+      miServo.write(q1);
+      delay(500);
+    }
+
     // Procesar movimientos
     if (q2 != q2a) {
       int delta_q2 = q2 - q2a;
@@ -266,12 +270,8 @@ void subscription_callback(const void *msg_in)
       pasos = 0;
       delay(500);
     }
-
-    if (q1 != q1a) {
-      q1a = q1;
-      miServo.write(q1);
-      delay(500);
-    }
+    
+    delay(500);
 
     if (estado_iman == 1) {
       digitalWrite(iman, HIGH);
@@ -279,6 +279,7 @@ void subscription_callback(const void *msg_in)
       digitalWrite(iman, LOW);
     }
 
+    delay(500);
     publish_bool(true);
   } else {
     Serial.println("Error: No se recibieron 4 números");
@@ -290,7 +291,8 @@ void subscription_callback(const void *msg_in)
 // Función para publicar el booleano
 void publish_bool(bool value) {
   pub_msg.data = value;
-  RCSOFTCHECK(rcl_publish(&publisher, &pub_msg, NULL));
+  //RCSOFTCHECK(rcl_publish(&publisher, &pub_msg, NULL));
+  rcl_publish(&publisher, &pub_msg, NULL);
   Serial.printf("Booleano publicado: %s\n", value ? "true" : "false");
 }
 //_______________________________________________________-
@@ -298,16 +300,17 @@ void publish_bool(bool value) {
 //___________FUNCIONES BRAZO ROBOTICO___________________
 void home() {
   Serial.println("Ejecutando HOME");
+  digitalWrite(iman, LOW);
   pasos = 12000;
   giro(Step2, Dir2, Enable2, 1, 2);
   delay(500);
-  giro(Step, Dir, Enable, 1, 1);
+  giro(Step, Dir, Enable, 0, 1);
   delay(500);
-  miServo.write(0);
+  miServo.write(180);
   delay(500);
   pasos = 0;
   q1a = 180;
-  q2a = 0;
+  q2a = 70;
   q3a = 80;
 }
 

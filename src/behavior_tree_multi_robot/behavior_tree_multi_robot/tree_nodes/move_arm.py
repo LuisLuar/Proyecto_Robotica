@@ -1,11 +1,11 @@
-# bt_nodes/release_object.py
+# bt_nodes/grasp_object.py
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Int32MultiArray, Bool
 import py_trees
 
-class ReleaseObjectNode(py_trees.behaviour.Behaviour):
-    def __init__(self, name, node: Node):
+class MoveArmNode(py_trees.behaviour.Behaviour):
+    def __init__(self, name, node: Node, q1: int,q2: int,q3: int ,efector: int):
         super().__init__(name)
         self.blackboard = py_trees.blackboard.Client()
         self.blackboard.register_key(
@@ -15,14 +15,20 @@ class ReleaseObjectNode(py_trees.behaviour.Behaviour):
         self.node = node
         self.namespace = self.blackboard.robot_ns
         self.done = False
+        self.q1 = q1
+        self.q2 = q2
+        self.q3 = q3
+        self.efector = efector
+
+        self.msg = Int32MultiArray()
+        self.msg.data = [self.q1, self.q2, self.q3, self.efector]  # Ejemplo para agarrar
+        self.node.get_logger().info(f"MSG: {self.msg}")
 
     def setup(self, **kwargs):
         return True
 
     def initialise(self):
-        self.done = False
-        msg = Int32MultiArray()
-        msg.data = [0, 40, 80, 0]  # Ejemplo para agarrar
+        self.done = False    
 
         self.namespace = self.blackboard.robot_ns
 
@@ -33,12 +39,12 @@ class ReleaseObjectNode(py_trees.behaviour.Behaviour):
             self.listener_callback,
             10)
 
-        self.publisher.publish(msg)
-        self.node.get_logger().info(f"[{self.namespace}] Enviando comando: agarrar objeto")
+        self.publisher.publish(self.msg)
+        #self.node.get_logger().info(f"[{self.namespace}] Enviando comando: agarrar objeto")
 
     def update(self):
         if self.done:
-            self.node.get_logger().info("Objeto agarrado")
+            self.node.get_logger().info("MoveArm COMPLETE")
             return py_trees.common.Status.SUCCESS
         return py_trees.common.Status.RUNNING
 

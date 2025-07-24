@@ -2,36 +2,36 @@ bool IMU_begin() {
   Wire.begin();
   Wire.setClock(400000);
 
-  imu.Config(&Wire, bfs::Mpu9250::I2C_ADDR_PRIM);
+  //imu.Config(&Wire, bfs::Mpu9250::I2C_ADDR_PRIM);
 
-  if (!imu.Begin()) {
+  while (!imu.begin()) {
     return false;
+    delay(10);
   }
 
-  bool ok1 = imu.ConfigAccelRange(bfs::Mpu9250::ACCEL_RANGE_2G);
-  bool ok2 = imu.ConfigGyroRange(bfs::Mpu9250::GYRO_RANGE_250DPS);
-  bool ok3 = imu.ConfigDlpfBandwidth(bfs::Mpu9250::DLPF_BANDWIDTH_20HZ);
+  imu.setAccelerometerRange(MPU6050_RANGE_2_G);
+  imu.setGyroRange(MPU6050_RANGE_250_DEG);
+  imu.setFilterBandwidth(MPU6050_BAND_21_HZ);
 
 
-  if (!(ok1 && ok2 && ok3)) {
+ 
+
+  /*if (!imu.ConfigSrd(19)) {
     return false;
-  }
-
-  if (!imu.ConfigSrd(19)) {
-    return false;
-  }
+  }*/
 
   Serial.println("Calibrando... No muevas el sensor.");
   for (int i = 0; i < samples; i++) {
-    imu.Read();
+    sensors_event_t a, g, temp;
+    imu.getEvent(&a, &g, &temp);
 
-    accX_offset += imu.accel_x_mps2();
-    accY_offset += imu.accel_y_mps2();
-    accZ_offset += imu.accel_z_mps2();//- 9.80665; // quitar gravedad
+    accX_offset += a.acceleration.x;
+    accY_offset += a.acceleration.y;
+    accZ_offset += a.acceleration.z;//- 9.80665; // quitar gravedad
 
-    gyroX_offset += imu.gyro_x_radps();
-    gyroY_offset += imu.gyro_y_radps();
-    gyroZ_offset += imu.gyro_z_radps();
+    gyroX_offset += g.gyro.x;  
+    gyroY_offset += g.gyro.y;  
+    gyroZ_offset += g.gyro.z;  
 
     delay(10);
   }
@@ -50,14 +50,13 @@ bool IMU_begin() {
 }
 
 bool IMU_update() {
-  if (!imu.Read()) {
-    return false;
-  }
+  sensors_event_t a, g, temp;
+  imu.getEvent(&a, &g, &temp);
 
   //______________ACELERACION____________
-  ax = imu.accel_x_mps2() - accX_offset;
-  ay = imu.accel_y_mps2() - accY_offset;
-  az = imu.accel_z_mps2() - accZ_offset;
+  ax = a.acceleration.x - accX_offset;
+  ay = a.acceleration.y - accY_offset;
+  az = a.acceleration.z - accZ_offset;
 
   if (abs(ax) < 0.07) ax = 0;
   if (abs(ay) < 0.2) ay = 0;
@@ -66,9 +65,9 @@ bool IMU_update() {
   //accX = alpha * ax_uf + (1.0 - alpha) * accX;
 
   //__________VELOCIDAD ANGULAR_____________
-  gx = imu.gyro_x_radps() - gyroX_offset;
-  gy  = imu.gyro_y_radps() - gyroY_offset;
-  gz  = imu.gyro_z_radps() - gyroZ_offset;
+  gx = g.gyro.x - gyroX_offset;
+  gy  = g.gyro.y - gyroY_offset;
+  gz  = g.gyro.z - gyroZ_offset;
 
   if (abs(gx) < 0.3) gx = 0;
   if (abs(gy) < 0.3) gy = 0;

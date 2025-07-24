@@ -21,7 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'bt_main = behavior_tree_multi_robot.bt_main:main',
-            'simulador_gui = behavior_tree_multi_robot.simulador_gui:main'
+            'gui = behavior_tree_multi_robot.simulador_gui:main'
         ],
     },
 )

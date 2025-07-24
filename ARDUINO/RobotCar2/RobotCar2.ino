@@ -16,6 +16,7 @@
 #include <sensor_msgs/msg/imu.h>
 #include <sensor_msgs/msg/range.h>
 #include <geometry_msgs/msg/twist.h>
+#include <Adafruit_Sensor.h>
 
 #include <WiFi.h>  // ← Nueva librería
 
@@ -91,9 +92,9 @@ const uint32_t agent_port = 8888;
 
 //_____________________________________IMU_________________________________________________________________________
 #include <Wire.h>
-#include "mpu9250.h"
+#include <Adafruit_MPU6050.h>
 
-bfs::Mpu9250 imu;
+Adafruit_MPU6050 imu;
 
 // Offsets calibrados
 float accX_offset = 0.062685;
@@ -155,8 +156,8 @@ unsigned int ppr = 1500;         // Número de muescas que tiene el disco del en
 //_______________________________________
 
 //___________ENCODER DERECHO_____________
-#define DerechoC1 33
-#define DerechoC2 32
+#define DerechoC1 32
+#define DerechoC2 33
 //_______________________________________
 
 //__________ENCODER IZQUIERDO____________

@@ -41,7 +41,7 @@ def generate_launch_description():
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
-            arguments=['1', '0', '0', '0', '0', '0', 'odom', 'robot2/odom'],
+            arguments=['0', '1', '0', '0', '0', '0', 'odom', 'robot2/odom'],
             output='screen'
         ),
 
