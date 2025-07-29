@@ -8,15 +8,16 @@ import py_trees
 
 
 class GoToPosition(py_trees.behaviour.Behaviour):
-    def __init__(self, name="GoToPosition", node=None):
+    def __init__(self, name="GoToPosition", node=None, goal_tolerance=None):
         super().__init__(name)
         # Declarar puertos de entrada
         self.blackboard = py_trees.blackboard.Client()
-        self.blackboard.register_key(key="robot_ns",access=py_trees.common.Access.READ)
+        self.blackboard.register_key(key="order_info",access=py_trees.common.Access.READ)
         self.blackboard.register_key(key="goal_coords",access=py_trees.common.Access.READ        )
 
         self.node = node
-        self.namespace = self.blackboard.robot_ns
+        self.namespace = None
+        self.cubo_ns = None
         self.goal = self.blackboard.goal_coords # [x, y]
         self.current_pose = np.zeros(3)  # x, y, theta
         self.reached_goal = False
@@ -26,9 +27,9 @@ class GoToPosition(py_trees.behaviour.Behaviour):
         self.k_angular = 1.2
         self.max_linear_speed = 0.5
         self.max_angular_speed = 1.0
-        self.goal_tolerance = 0.05
+        self.goal_tolerance = goal_tolerance
         self.angle_tolerance = 0.08
-        self.slowdown_radius = 0.3
+        self.slowdown_radius = goal_tolerance + 0.1
 
         # Variables de estado
         self.prev_angular_z = 0.0
@@ -36,22 +37,23 @@ class GoToPosition(py_trees.behaviour.Behaviour):
         self.moving_toward_goal = False
 
         self.done_init = False
+        self.done_odom = False
         
         
 
     def initialise(self):
         """Solo se ejecuta cuando el nodo se activa por primera vez"""
-        self.namespace = self.blackboard.robot_ns
+        self.namespace,self.cubo_ns = self.blackboard.order_info
         self.goal = self.blackboard.goal_coords # [x, y]
         self.prev_angular_z = 0.0
         self.reached_goal = False
         self.ready_to_move = False
         self.moving_toward_goal = False
 
-        self.node.get_logger().info(f"Robot seleccionado: {self.namespace}")
-        self.node.get_logger().info(f"Cordenadas: {self.goal}")
+        #self.node.get_logger().info(f"Robot seleccionado: {self.namespace}")
+        #self.node.get_logger().info(f"Cordenadas: {self.goal}")
 
-            # Suscripción a odometría
+        # Suscripción a odometría
         self.odom_sub = self.node.create_subscription(
             Odometry,
             f'/{self.namespace}/odometry/filtered',
@@ -84,10 +86,11 @@ class GoToPosition(py_trees.behaviour.Behaviour):
             _, _, self.current_pose[2] = euler_from_quaternion(
                 [quat.x, quat.y, quat.z, quat.w]
             )
+            self.done_odom = True
 
     def control_callback(self):
         """Callback de control a 20Hz"""
-        if self.done_init:
+        if self.done_init and self.done_odom:
             if self.goal is None or self.reached_goal:
                 return
                 
@@ -151,17 +154,18 @@ class GoToPosition(py_trees.behaviour.Behaviour):
             self.cmd_vel_pub.publish(Twist())  # Parada de seguridad
             
             # Destruye la suscripción
-            """if hasattr(self, 'odom_sub') and self.odom_sub:
+            if hasattr(self, 'odom_sub') and self.odom_sub:
                 self.node.destroy_subscription(self.odom_sub)
                 self.odom_sub = None  # Marca como destruido
 
             # Destruye el publicador
             if hasattr(self, 'cmd_vel_pub') and self.cmd_vel_pub:
                 self.node.destroy_publisher(self.cmd_vel_pub)
-                self.cmd_vel_pub = None  # Marca como destruido"""
+                self.cmd_vel_pub = None  # Marca como destruido
 
             self.control_timer.cancel()
             self.done_init = False
+            self.done_odom = False
 
 
     @staticmethod

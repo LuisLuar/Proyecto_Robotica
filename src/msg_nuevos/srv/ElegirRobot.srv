@@ -1,3 +1,4 @@
 # Solicitud del usuario desde GUI o consola
 ---
 string robot_namespace  # ej: "robot1" o "robot2"
+string cubo #ej: "cubo1" o "cubo2"

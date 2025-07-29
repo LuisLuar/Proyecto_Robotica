@@ -1,219 +1,379 @@
 #!/usr/bin/env python3
-# Shebang para indicar que el script debe ejecutarse con Python 3
 
-# Importación de librerías
-import rclpy  # Librería principal de ROS 2 para Python
-from rclpy.node import Node  # Para crear nodos ROS
-import numpy as np  # Para cálculos numéricos
-from nav_msgs.msg import Odometry  # Mensaje para la odometría del robot
-from geometry_msgs.msg import Twist  # Mensaje para comandos de velocidad
-from tf_transformations import euler_from_quaternion  # Para convertir orientación
-from time import time  # Para medición de tiempos
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy
+from geometry_msgs.msg import TransformStamped, PoseWithCovarianceStamped
+import tf2_ros
+import cv2
+import numpy as np
+from collections import deque, defaultdict
+from scipy.spatial.transform import Rotation as R
+from pupil_apriltags import Detector
+import threading
 
-class SquareTrajectoryController(Node):
-    """Nodo ROS que controla un robot para seguir una trayectoria cuadrada"""
-    
+class AprilTagDetector(Node):
     def __init__(self):
-        """Inicializa el nodo con parámetros, variables de estado y comunicaciones ROS"""
-        super().__init__('controlador_trayectoria_cuadrada')  # Inicializa el nodo ROS
-
-        # ========== PARÁMETROS CONFIGURABLES ==========
-        self.declare_parameters(
-            namespace='',
-            parameters=[
-                ('k_linear', 0.3),  # Ganancia para control lineal
-                ('k_angular', 0.5),  # Ganancia para control angular
-                ('max_linear_speed', 0.7),  # Velocidad lineal máxima (m/s)
-                ('max_angular_speed', 0.9),  # Velocidad angular máxima (rad/s)
-                ('slowdown_radius', 0.3),  # Radio para comenzar a frenar (m)
-                ('goal_tolerance', 0.05),  # Tolerancia para considerar objetivo alcanzado (m)
-                #('min_distance', 0.05),  # Distancia mínima para considerar obstáculo
-                ('initial_angle_tolerance', 0.05),  # ~22.5°
-                ('final_angle_tolerance', np.pi/8),        # ~2.86°
-                ('wait_time_between_goals', 1),  # Tiempo de espera entre objetivos (s)
-                ('wait_after_orientation', 1),  # Tiempo de espera después de alineación (s)
-                ('mission_repetitions', 1)  # Veces que se repetirá la trayectoria
-            ]
-        )
-
-        # ========== ESTADO INTERNO ==========
-        self.current_pose = np.zeros(3)  # [x, y, theta] posición y orientación actual
-        self.current_goal_idx = 0  # Índice del objetivo actual en la lista de goals
-        self.mission_complete = False  # Bandera de misión completada
-        self.last_goal_time = time()  # Último tiempo que se alcanzó un objetivo
-        self.ready_to_move_time = None  # Tiempo en que el robot está listo para moverse
-        self.waiting_to_move = False  # Bandera de espera para moverse
-        self.moving_toward_goal = False  # Bandera de movimiento hacia objetivo
-        self.prev_angular_z = 0.0  # Valor anterior de velocidad angular para suavizado
-        self.completed_repetitions = 0  # Contador de repeticiones completadas
-
-        # ========== TRAYECTORIA ==========
-        # Lista de objetivos [x, y, theta] que forman un cuadrado
-        self.goals = [
-            [1.0, 0.0, 0.0],        # Vértice 1: frente, orientación 0
-            [1.0, 1.05, np.pi / 2],  # Vértice 2: derecha, orientación 90°
-            [0.0, 1.05, np.pi],      # Vértice 3: atrás, orientación 180°
-            [0.0, 0.0, 3 * np.pi / 2] # Vértice 4: izquierda, orientación 270°
-        ]
-
-        # ========== COMUNICACIONES ROS ==========
-        # Publicador para comandos de velocidad
-        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        super().__init__('apriltag_detector')
         
-        # Suscriptor para odometría
-        self.odom_sub = self.create_subscription(
-            Odometry,
-            '/odometry/filtered',
-            self.odom_callback,
-            10
+        # Configuración de reflejo (1=horizontal, 0=vertical, -1=ambos, None=sin reflejo)
+        self.flip_mode = 1
+        
+        # Configuración inicial
+        self.setup_parameters()
+        self.setup_camera()
+        self.setup_detector()
+        self.setup_publishers()
+        self.setup_tf_broadcaster()
+        
+        # Variables de estado protegidas con lock
+        self.lock = threading.Lock()
+        self.latest_detections = {}
+        self.reference_pose = None
+        self.reference_rotation = None
+        
+        # Iniciar procesamiento
+        self.start_processing_timers()
+        self.get_logger().info("Nodo AprilTag Detector iniciado correctamente")
+
+    def setup_parameters(self):
+        """Configura todos los parámetros del nodo"""
+        # Parámetros básicos
+        self.declare_parameter('camera_id', 2)
+        self.declare_parameter('tag_size', 0.075)  # metros
+        self.declare_parameter('reference_tag_id', 1)
+        self.declare_parameter('show_debug_window', True)
+        self.declare_parameter('detection_frequency', 30.0)  # Hz
+        self.declare_parameter('publish_frequency', 20.0)   # Hz
+        self.declare_parameter('tf_publish_frequency', 10.0)  # Hz
+        
+        # Configuración de robots
+        self.declare_parameter('robot1_tag_id', 3)
+        self.declare_parameter('robot2_tag_id', 4)
+        
+        # Obtener parámetros
+        self.camera_id = self.get_parameter('camera_id').value
+        self.tag_size = self.get_parameter('tag_size').value
+        self.reference_tag_id = self.get_parameter('reference_tag_id').value
+        self.show_debug = self.get_parameter('show_debug_window').value
+        self.detection_freq = self.get_parameter('detection_frequency').value
+        self.publish_freq = self.get_parameter('publish_frequency').value
+        self.tf_publish_freq = self.get_parameter('tf_publish_frequency').value
+        
+        # Configurar diccionario de robots
+        self.robot_tags = {
+            self.get_parameter('robot1_tag_id').value: 'robot1',
+            self.get_parameter('robot2_tag_id').value: 'robot2'
+        }
+
+    def setup_camera(self):
+        """Configura la cámara y parámetros de captura"""
+        self.cap = cv2.VideoCapture(self.camera_id)
+        if not self.cap.isOpened():
+            self.get_logger().error(f"No se pudo abrir la cámara con ID {self.camera_id}")
+            raise RuntimeError("No se pudo inicializar la cámara")
+        
+        # Configuración óptima de la cámara
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        self.cap.set(cv2.CAP_PROP_FPS, self.detection_freq)
+        self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+        
+        if self.show_debug:
+            cv2.namedWindow("AprilTag Detection", cv2.WINDOW_NORMAL)
+            cv2.resizeWindow("AprilTag Detection", 800, 600)
+
+    def setup_detector(self):
+        """Configura el detector de AprilTags"""
+        self.detector = Detector(
+            families='tag36h11',
+            nthreads=4,
+            quad_decimate=1.0,
+            quad_sigma=0.0,
+            refine_edges=1,
+            decode_sharpening=0.25
         )
         
-        # Temporizador para control periódico (20 Hz)
-        self.control_timer = self.create_timer(0.05, self.execute_control)
+        # Matriz de corrección para cámara (ajustar según necesidad)
+        self.camera_correction = np.array([
+            [1,  0,  0],
+            [0, -1,  0],  # Inversión en Y (opcional)
+            [0,  0, -1]   # Inversión en Z (opcional)
+        ])
 
-        # Parada inicial de seguridad
-        self.cmd_vel_pub.publish(Twist())
-        self.get_logger().info("🚗 Controlador de trayectoria cuadrada iniciado.")
-
-    def odom_callback(self, msg):
-        """Callback para actualizar la pose actual del robot"""
-        if self.mission_complete:
-            return  # Ignora odometría si la misión está completa
-
-        # Actualiza posición (x,y)
-        self.current_pose[0] = msg.pose.pose.position.x
-        self.current_pose[1] = msg.pose.pose.position.y
-
-        # Convierte orientación (quaternion) a ángulo de Euler (solo yaw)
-        quat = msg.pose.pose.orientation
-        _, _, self.current_pose[2] = euler_from_quaternion(
-            [quat.x, quat.y, quat.z, quat.w]
+    def setup_publishers(self):
+        """Configura los publishers de ROS2"""
+        qos_profile = QoSProfile(
+            depth=10,
+            reliability=ReliabilityPolicy.BEST_EFFORT
         )
-
-    def calculate_control(self):
-        """Calcula los comandos de velocidad para alcanzar el objetivo actual"""
-        cmd_vel = Twist()  # Comando de velocidad inicializado a cero
         
-        if self.mission_complete:
-            return cmd_vel  # Retorna cero si misión completada
+        self.robot_publishers = {}
+        for tag_id, robot_name in self.robot_tags.items():
+            self.robot_publishers[tag_id] = self.create_publisher(
+                PoseWithCovarianceStamped,
+                f'/{robot_name}/vision_pose',
+                qos_profile
+            )
 
-        goal = self.goals[self.current_goal_idx]  # Objetivo actual
+    def setup_tf_broadcaster(self):
+        """Configura el TF broadcaster"""
+        self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
 
-        # Cálculo de errores
-        dx = goal[0] - self.current_pose[0]  # Error en x
-        dy = goal[1] - self.current_pose[1]  # Error en y
-        distance = np.hypot(dx, dy)  # Distancia euclidiana al objetivo
-        target_angle = np.arctan2(dy, dx)  # Ángulo hacia el objetivo
-        angle_error = self.normalize_angle(target_angle - self.current_pose[2])  # Error angular normalizado
+    def start_processing_timers(self):
+        """Inicia los temporizadores para procesamiento"""
+        # Temporizador para detección
+        self.create_timer(1.0/self.detection_freq, self.detection_loop)
+        
+        # Temporizador para publicación
+        self.create_timer(1.0/self.publish_freq, self.publish_loop)
+        
+        # Temporizador para TF
+        self.create_timer(1.0/self.tf_publish_freq, self.tf_publish_loop)
 
-        # Obtención de parámetros configurables
-        k_lin = self.get_parameter('k_linear').value  # Ganancia lineal
-        k_ang = self.get_parameter('k_angular').value  # Ganancia angular
-        max_lin = self.get_parameter('max_linear_speed').value  # Vel. lineal máxima
-        max_ang = self.get_parameter('max_angular_speed').value  # Vel. angular máxima
-        slowdown_rad = self.get_parameter('slowdown_radius').value  # Radio de frenado
-        goal_tol = self.get_parameter('goal_tolerance').value  # Tolerancia de objetivo
-        wait_time = self.get_parameter('wait_time_between_goals').value  # Tiempo de espera
-        wait_after_orientation = self.get_parameter('wait_after_orientation').value  # Espera post-alineación
-        mission_repetitions = self.get_parameter('mission_repetitions').value  # Repeticiones
-        initial_tol = self.get_parameter('initial_angle_tolerance').value # Para alineación inicial        
-        final_tol = self.get_parameter('final_angle_tolerance').value # Para orientación final
+    def detection_loop(self):
+        """Procesamiento de detección de AprilTags con imagen reflejada"""
+        try:
+            ret, frame = self.cap.read()
+            if not ret:
+                self.get_logger().warn("Error al capturar frame", throttle_duration_sec=5)
+                return
 
-        # Lógica de control principal
-        if distance > goal_tol:  # Si no hemos alcanzado el objetivo
-            if not self.moving_toward_goal:  # Fase de alineación angular
-                if abs(angle_error) > initial_tol:  # Si el error angular es grande
-                    self.waiting_to_move = False
-                    self.ready_to_move_time = None
-                    # Control solo angular (giro en el lugar)
-                    cmd_vel.angular.z = np.clip(k_ang * angle_error, -max_ang, max_ang)
-                    return cmd_vel
-                else:  # Error angular pequeño, esperar antes de moverse
-                    if not self.waiting_to_move:
-                        self.ready_to_move_time = time()
-                        self.waiting_to_move = True
+            # Reflejar la imagen según el modo configurado
+            if self.flip_mode in [1, 0, -1]:
+                frame = cv2.flip(frame, self.flip_mode)
+            
+            # Obtener dimensiones de la imagen
+            height, width = frame.shape[:2]
+            
+            # Detección en escala de grises
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            detections = self.detector.detect(
+                gray,
+                estimate_tag_pose=True,
+                camera_params=self.get_camera_params(width),
+                tag_size=self.tag_size
+            )
 
-                    if time() - self.ready_to_move_time < wait_after_orientation:
-                        return cmd_vel  # Espera sin movimiento
-                    else:
-                        self.moving_toward_goal = True  # Listo para movimiento lineal
+            # Procesar detecciones
+            processed_data = {}
+            for detection in detections:
+                tag_id = detection.tag_id
+                processed_data[tag_id] = self.process_single_detection(detection, width)
 
-            # Control combinado lineal + angular
-            linear_speed = min(k_lin * distance, max_lin * min(1.0, distance / slowdown_rad))
-            angular_speed = k_ang * angle_error
-            angular_speed = np.clip(angular_speed, -max_ang, max_ang)
+            # Actualizar datos compartidos
+            with self.lock:
+                self.latest_detections = processed_data
+                if self.reference_tag_id in processed_data:
+                    ref_data = processed_data[self.reference_tag_id]
+                    self.reference_pose = ref_data['position']
+                    self.reference_rotation = ref_data['rotation']
 
-            # Suavizado de la velocidad angular (80% nuevo + 20% anterior)
-            cmd_vel.linear.x = linear_speed
-            cmd_vel.angular.z = 0.8 * angular_speed + 0.2 * self.prev_angular_z
-            self.prev_angular_z = cmd_vel.angular.z
+            # Visualización
+            if self.show_debug:
+                self.draw_detections(frame, detections, processed_data)
+                cv2.imshow("AprilTag Detection", frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    self.cleanup()
+                    rclpy.shutdown()
 
-        else:  # Hemos alcanzado la posición del objetivo
-            # Detenemos el robot entre objetivos
-            self.cmd_vel_pub.publish(Twist())
+        except Exception as e:
+            self.get_logger().error(f"Error en detección: {str(e)}", throttle_duration_sec=5)
 
-            # Verificamos la orientación final deseada
-            final_angle_error = self.normalize_angle(goal[2] - self.current_pose[2])
+    def process_single_detection(self, detection, image_width):
+        """Procesa una detección individual considerando el reflejo"""
+        tag_id = detection.tag_id
+        
+        # Reflejar las coordenadas si es necesario
+        if self.flip_mode == 1:  # Reflejo horizontal
+            corners = detection.corners.copy()
+            corners[:, 0] = image_width - corners[:, 0]
+            # Reordenar esquinas para mantener orientación correcta
+            corners = corners[[1, 0, 3, 2], :]
+        else:
+            corners = detection.corners
+        
+        # Aplicar corrección a la pose
+        t_corr = self.camera_correction @ detection.pose_t.ravel()
+        R_corr = self.camera_correction @ detection.pose_R
+        
+        # Calcular pose relativa si hay referencia
+        t_rel, R_rel, quat_rel = None, None, None
+        if (self.reference_pose is not None and 
+            self.reference_rotation is not None and
+            (tag_id in self.robot_tags or tag_id == self.reference_tag_id)):
+            
+            t_rel = self.reference_rotation.T @ (t_corr - self.reference_pose)
+            R_rel = self.reference_rotation.T @ R_corr
+            
+            # Forzar 2D
+            t_rel[2] = 0.0
+            yaw = np.arctan2(R_rel[1, 0], R_rel[0, 0])
+            
+            # Ajustar ángulo si la imagen está reflejada
+            if self.flip_mode == 1:
+                yaw = -yaw
+                
+            quat_rel = R.from_euler('z', yaw).as_quat()
+        
+        return {
+            'position': t_corr,
+            'rotation': R_corr,
+            'relative_position': t_rel,
+            'relative_quaternion': quat_rel,
+            'corners': corners,
+            'center': np.mean(corners, axis=0)
+        }
 
-            if abs(final_angle_error) > final_tol:
-                # Ajuste fino de orientación
-                cmd_vel.angular.z = np.clip(k_ang * final_angle_error, -max_ang, max_ang)
-                self.prev_angular_z = cmd_vel.angular.z
+    def draw_detections(self, frame, detections, processed_data):
+        """Dibuja las detecciones en el frame con diferentes colores"""
+        for detection in detections:
+            tag_id = detection.tag_id
+            if tag_id not in processed_data:
+                continue
+                
+            data = processed_data[tag_id]
+            corners = data['corners'].astype(int)
+            center = data['center'].astype(int)
+            
+            # Determinar color según tipo de tag
+            if tag_id == self.reference_tag_id:
+                color = (0, 255, 255)  # Amarillo para referencia
+                label = f"REF {tag_id}"
+            elif tag_id in self.robot_tags:
+                color = (0, 255, 0)  # Verde para robots conocidos
+                label = f"{self.robot_tags[tag_id]} (ID:{tag_id})"
             else:
-                # Espera antes de pasar al siguiente objetivo
-                if time() - self.last_goal_time > wait_time:
-                    if self.current_goal_idx < len(self.goals) - 1:  # Si hay más objetivos
-                        self.current_goal_idx += 1  # Siguiente objetivo
-                        self.last_goal_time = time()
-                        self.ready_to_move_time = None
-                        self.waiting_to_move = False
-                        self.moving_toward_goal = False
-                        self.get_logger().info(f"➡️ Objetivo {self.current_goal_idx} alcanzado. Avanzando al siguiente.")
-                    else:  # Último objetivo alcanzado
-                        self.completed_repetitions += 1
-                        if self.completed_repetitions < mission_repetitions:
-                            # Reinicia para otra repetición
-                            self.get_logger().info(f"🔁 Repetición {self.completed_repetitions}/{mission_repetitions}. Reiniciando.")
-                            self.current_goal_idx = 0
-                            self.last_goal_time = time()
-                            self.ready_to_move_time = None
-                            self.waiting_to_move = False
-                            self.moving_toward_goal = False
-                        else:  # Misión completamente terminada
-                            self.get_logger().info("✅ ¡Misión completada totalmente!")
-                            self.mission_complete = True
-                            self.control_timer.cancel()
-                            self.cmd_vel_pub.publish(Twist())  # Parada final
+                color = (0, 0, 255)  # Rojo para tags desconocidos
+                label = f"UNKNOWN {tag_id}"
+            
+            # Dibujar contorno y texto
+            cv2.polylines(frame, [corners], True, color, 2)
+            cv2.putText(frame, label, tuple(center), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            
+            # Mostrar posición relativa para tags configurados
+            if tag_id in self.robot_tags and data['relative_position'] is not None:
+                dist = np.linalg.norm(data['relative_position'][:2])
+                cv2.putText(frame, f"Dist: {dist:.2f}m", 
+                           (center[0], center[1] + 25),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
 
-        return cmd_vel
+    def publish_loop(self):
+        """Publicación periódica a frecuencia fija"""
+        with self.lock:
+            current_data = self.latest_detections.copy()
+            ref_available = self.reference_pose is not None
+        
+        if not ref_available:
+            return
+        
+        current_time = self.get_clock().now().to_msg()
+        
+        # Publicar solo los tags configurados como robots
+        for tag_id in self.robot_tags:
+            if tag_id in current_data and current_data[tag_id]['relative_position'] is not None:
+                data = current_data[tag_id]
+                self.publish_robot_pose(
+                    tag_id,
+                    current_time,
+                    data['relative_position'],
+                    data['relative_quaternion']
+                )
 
-    def normalize_angle(self, angle):
-        """Normaliza ángulos al rango [-π, π]"""
-        while angle > np.pi:
-            angle -= 2.0 * np.pi
-        while angle < -np.pi:
-            angle += 2.0 * np.pi
-        return angle
+    def tf_publish_loop(self):
+        """Publicación TF periódica a frecuencia fija"""
+        with self.lock:
+            current_data = self.latest_detections.copy()
+            ref_available = self.reference_pose is not None
+        
+        if not ref_available:
+            return
+        
+        current_time = self.get_clock().now().to_msg()
+        
+        for tag_id in self.robot_tags:
+            if tag_id in current_data and current_data[tag_id]['relative_position'] is not None:
+                data = current_data[tag_id]
+                self.publish_tf(
+                    tag_id,
+                    current_time,
+                    data['relative_position'],
+                    data['relative_quaternion']
+                )
 
-    def execute_control(self):
-        """Ejecuta el control periódicamente y publica los comandos"""
-        cmd_vel = self.calculate_control()
-        self.cmd_vel_pub.publish(cmd_vel)
+    def publish_robot_pose(self, tag_id, time, translation, quaternion):
+        """Publica la pose del robot"""
+        pose_msg = PoseWithCovarianceStamped()
+        pose_msg.header.stamp = time
+        pose_msg.header.frame_id = 'world'
+        pose_msg.pose.pose.position.x = float(translation[0])
+        pose_msg.pose.pose.position.y = float(translation[1])
+        pose_msg.pose.pose.position.z = 0.0
+        pose_msg.pose.pose.orientation.x = quaternion[0]
+        pose_msg.pose.pose.orientation.y = quaternion[1]
+        pose_msg.pose.pose.orientation.z = quaternion[2]
+        pose_msg.pose.pose.orientation.w = quaternion[3]
+        
+        # Covarianza estimada
+        pose_msg.pose.covariance = [
+            0.01, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.01, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.01, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.01, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.01, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.05
+        ]
+        
+        self.robot_publishers[tag_id].publish(pose_msg)
+
+    def publish_tf(self, tag_id, time, translation, quaternion):
+        """Publica la transformación TF"""
+        tf = TransformStamped()
+        tf.header.stamp = time
+        tf.header.frame_id = 'world'
+        tf.child_frame_id = f'{self.robot_tags[tag_id]}/base_link'
+        tf.transform.translation.x = float(translation[0])
+        tf.transform.translation.y = float(translation[1])
+        tf.transform.translation.z = 0.0
+        tf.transform.rotation.x = quaternion[0]
+        tf.transform.rotation.y = quaternion[1]
+        tf.transform.rotation.z = quaternion[2]
+        tf.transform.rotation.w = quaternion[3]
+        self.tf_broadcaster.sendTransform(tf)
+
+    def get_camera_params(self, image_width):
+        """Obtiene parámetros de la cámara ajustados para el reflejo"""
+        fx, fy = 800.0, 800.0  # Distancias focales
+        cx, cy = image_width/2, 360.0  # Puntos principales
+        
+        # Ajustar punto principal para reflejo horizontal
+        if self.flip_mode == 1:
+            cx = image_width - cx
+        
+        return (fx, fy, cx, cy)
+
+    def cleanup(self):
+        """Limpia recursos"""
+        if hasattr(self, 'cap') and self.cap.isOpened():
+            self.cap.release()
+        if self.show_debug:
+            cv2.destroyAllWindows()
 
 def main(args=None):
-    """Función principal para iniciar el nodo"""
-    rclpy.init(args=args)  # Inicializa ROS 2
-    controller = SquareTrajectoryController()  # Crea el controlador
-
+    rclpy.init(args=args)
+    node = AprilTagDetector()
+    
     try:
-        rclpy.spin(controller)  # Mantiene el nodo activo
-    except KeyboardInterrupt:  # Maneja interrupción por teclado
-        pass
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("Interrupción por teclado")
+    except Exception as e:
+        node.get_logger().error(f"Error: {str(e)}")
     finally:
-        # Limpieza final
-        controller.cmd_vel_pub.publish(Twist())  # Parada de seguridad
-        controller.destroy_node()  # Destruye el nodo
-        rclpy.shutdown()  # Cierra ROS 2
+        node.cleanup()
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
-    main()  # Ejecuta la función principal
+    main()

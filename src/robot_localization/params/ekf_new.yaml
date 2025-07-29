@@ -4,7 +4,7 @@ ekf_filter_node:
         two_d_mode: true
         publish_tf: true
  
-        map_frame: map             
+        map_frame: world             
         odom_frame: odom            
         base_link_frame: base_footprint 
         world_frame: odom 

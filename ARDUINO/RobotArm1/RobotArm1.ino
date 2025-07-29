@@ -168,7 +168,7 @@ void setup() {
   pinMode(iman, OUTPUT);
   
   // Posición home
-  //home();
+  home();
 
   Serial.println("CORRECTO Y FUNCIONANDO");
   digitalWrite(led_error, LOW);

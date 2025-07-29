@@ -16,6 +16,10 @@ find_package(builtin_interfaces REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/MoveRobot.srv"
   "srv/ElegirRobot.srv"
+  "srv/GetTagPose.srv"
+  "msg/AprilTagWorld.msg"
+  "msg/AprilTagWorldArray.msg"
+  "msg/PosRelativa.msg"
   DEPENDENCIES builtin_interfaces
 )
 

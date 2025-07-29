@@ -9,11 +9,12 @@ class MoveArmNode(py_trees.behaviour.Behaviour):
         super().__init__(name)
         self.blackboard = py_trees.blackboard.Client()
         self.blackboard.register_key(
-            key="robot_ns",
+            key="order_info",
             access=py_trees.common.Access.READ
         )
         self.node = node
-        self.namespace = self.blackboard.robot_ns
+        self.namespace = None
+        self.cubo_ns = None
         self.done = False
         self.q1 = q1
         self.q2 = q2
@@ -22,7 +23,7 @@ class MoveArmNode(py_trees.behaviour.Behaviour):
 
         self.msg = Int32MultiArray()
         self.msg.data = [self.q1, self.q2, self.q3, self.efector]  # Ejemplo para agarrar
-        self.node.get_logger().info(f"MSG: {self.msg}")
+        #self.node.get_logger().info(f"MSG: {self.msg}")
 
     def setup(self, **kwargs):
         return True
@@ -30,7 +31,7 @@ class MoveArmNode(py_trees.behaviour.Behaviour):
     def initialise(self):
         self.done = False    
 
-        self.namespace = self.blackboard.robot_ns
+        self.namespace,self.cubo_ns  = self.blackboard.order_info
 
         self.publisher = self.node.create_publisher(Int32MultiArray, f"/{self.namespace}/request_srv", 10)
         self.subscription = self.node.create_subscription(
@@ -40,7 +41,7 @@ class MoveArmNode(py_trees.behaviour.Behaviour):
             10)
 
         self.publisher.publish(self.msg)
-        #self.node.get_logger().info(f"[{self.namespace}] Enviando comando: agarrar objeto")
+        self.node.get_logger().info(f"[{self.namespace}] Enviando comando: agarrar objeto")
 
     def update(self):
         if self.done:
@@ -55,4 +56,4 @@ class MoveArmNode(py_trees.behaviour.Behaviour):
     def terminate(self, new_status):
         # Resetear estado interno para permitir reutilización
         self._done = False
-        #return super().terminate(new_status)
+        return super().terminate(new_status)

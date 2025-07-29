@@ -72,6 +72,24 @@ Visualization Manager:
       Plane Cell Count: 30 # Número de celdas
       Reference Frame: <Fixed Frame> # Marco de referencia
       Value: true
+    
+
+    # =============================================
+    # Visualización de Cubos (Marker)
+    # =============================================
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Cubos
+      Namespaces:
+        {}  # Esto mostrará todos los namespaces
+      Queue Size: 100
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /visualization_marker
+      Value: true
 
     # =============================================
     # Robot 1 (Configuración original adaptada)

@@ -63,7 +63,7 @@ struct timespec getTime() {
 #define Step2 27
 #define Dir2 12
 #define Enable2 25
-#define iman 13
+#define iman 17
 const int FC1 = 32, FC2 = 33, FC3 = 35, FC4 = 34;
 const int pinServo = 15;
 
@@ -168,7 +168,7 @@ void setup() {
   pinMode(iman, OUTPUT);
   
   // Posición home
-  //home();
+  home();
 
   Serial.println("CORRECTO Y FUNCIONANDO");
   digitalWrite(led_error, LOW);
@@ -242,34 +242,47 @@ void subscription_callback(const void *msg_in)
       q1a = q1;
       miServo.write(q1);
       delay(500);
+      Serial.printf("q1a: %d\n", q1a);
+      Serial.printf("pasos: %d\n", pasos);
     }
+    
 
     // Procesar movimientos
     if (q2 != q2a) {
       int delta_q2 = q2 - q2a;
-      pasos = abs(delta_q2) * 100;
-      if (delta_q2 > 0) {
-        giro(Step, Dir, Enable, 0, 1);
+      pasos = abs(delta_q2) * 25;
+      if (delta_q2 < 0) {
+        Serial.println(delta_q2);
+        giro(Step,Dir,Enable, 0, 1);
       } else {
         giro(Step, Dir, Enable, 1, 1);
       }
+      
       q2a = q2;
+      Serial.printf("q2a: %d\n", q2a);
+      Serial.printf("pasos: %d\n", pasos);
       pasos = 0;
       delay(500);
+      
     }
+    
 
     if (q3 != q3a) {
       int delta_q3 = q3 - q3a;
-      pasos = abs(delta_q3) * 100;
-      if (delta_q3 > 0) {
+      pasos = abs(delta_q3) * 25;
+      if (delta_q3 < 0) {
         giro(Step2, Dir2, Enable2, 1, 2);
       } else {
         giro(Step2, Dir2, Enable2, 0, 2);
       }
       q3a = q3;
+      Serial.printf("q3a: %d\n", q3a);
+      Serial.printf("pasos: %d\n", pasos);
       pasos = 0;
       delay(500);
+      
     }
+    
     
     delay(500);
 
@@ -285,6 +298,9 @@ void subscription_callback(const void *msg_in)
     Serial.println("Error: No se recibieron 4 números");
     publish_bool(false);
   }
+  
+  
+  
 
 }
 
@@ -302,40 +318,42 @@ void home() {
   Serial.println("Ejecutando HOME");
   digitalWrite(iman, LOW);
   pasos = 12000;
-  giro(Step2, Dir2, Enable2, 1, 2);
+  giro(Step2, Dir2, Enable2, 0, 2);
   delay(500);
-  giro(Step, Dir, Enable, 0, 1);
+  giro(Step, Dir, Enable, 1, 1);
   delay(500);
   miServo.write(180);
   delay(500);
   pasos = 0;
   q1a = 180;
-  q2a = 70;
-  q3a = 80;
+  q2a = 60;
+  q3a = 90;
 }
 
 void giro(int paso_, int dire_, int habi_, int dir_, int nema_) {
   digitalWrite(habi_, LOW);
   bool emergencia = false;
+  Serial.println("__________INICIO GIRO__________");
 
   digitalWrite(dire_, dir_ ? HIGH : LOW);
 
   for (int i = 0; i < pasos; i++) {
+    Serial.println(i);
     if (dir_ == 0) {
-      if (digitalRead(FC2) == HIGH && nema_ == 1 ) {
-        emergencia = true;
-        q2 = 70;
-      } else if (digitalRead(FC3) == HIGH && nema_ == 2 ) {
-        emergencia = true;
-        q3 = 0;
-      }
-    } else {
       if (digitalRead(FC1) == HIGH && nema_ == 1 ) {
         emergencia = true;
         q2 = 0;
       } else if (digitalRead(FC4) == HIGH && nema_ == 2 ) {
         emergencia = true;
-        q3 = 80;
+        q3 = 90;
+      }
+    } else {
+      if (digitalRead(FC2) == HIGH && nema_ == 1 ) {
+        emergencia = true;
+        q2 = 60;
+      } else if (digitalRead(FC3) == HIGH && nema_ == 2 ) {
+        emergencia = true;
+        q3 = 0;
       }
     }
 
@@ -356,4 +374,5 @@ void giro(int paso_, int dire_, int habi_, int dir_, int nema_) {
   }
 
   digitalWrite(habi_, HIGH);
+  Serial.println("__________FIN GIRO__________");
 }

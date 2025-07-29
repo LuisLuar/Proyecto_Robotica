@@ -23,28 +23,6 @@ def generate_launch_description():
             )
         ),
 
-        # 3. Static transforms
-        Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            arguments=['0', '0', '0', '0', '0', '0', 'world', 'odom'],
-            output='screen'
-        ),
-        
-        Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            arguments=['0', '0', '0', '0', '0', '0', 'odom', 'robot1/odom'],
-            output='screen'
-        ),
-        
-        Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            arguments=['0', '1', '0', '0', '0', '0', 'odom', 'robot2/odom'],
-            output='screen'
-        ),
-
         # 4. Path visualization
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -59,3 +37,6 @@ def generate_launch_description():
             )
         )
     ])
+
+
+

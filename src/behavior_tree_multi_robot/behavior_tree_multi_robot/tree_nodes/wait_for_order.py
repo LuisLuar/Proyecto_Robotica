@@ -9,6 +9,7 @@ class WaitForOrder(py_trees.behaviour.Behaviour):
         super().__init__(name)
         self.node = node  # Nodo rclpy que maneja ROS
         self.robot_selected = None
+        self.cubo_selected = None 
         self.future = None
         self.client = None
         self.sent_request = False
@@ -16,7 +17,7 @@ class WaitForOrder(py_trees.behaviour.Behaviour):
         # Declarar puerto de salida
         self.blackboard = py_trees.blackboard.Client()
         self.blackboard.register_key(
-            key="robot_ns",
+            key="order_info",
             access=py_trees.common.Access.WRITE
         )
 
@@ -24,6 +25,7 @@ class WaitForOrder(py_trees.behaviour.Behaviour):
     def initialise(self):
         # Solo se llama una vez al empezar
         self.client = self.node.create_client(ElegirRobot, 'elegir_robot')
+        self.node.get_logger().info('<-Ingresar Robot->')
         while not self.client.wait_for_service(timeout_sec=1.0):
             self.node.get_logger().info('Esperando servicio elegir_robot...')
         self.sent_request = False
@@ -40,8 +42,10 @@ class WaitForOrder(py_trees.behaviour.Behaviour):
             try:
                 response = self.future.result()
                 self.robot_selected = response.robot_namespace
-                self.node.get_logger().info(f"Robot seleccionado: {self.robot_selected}")
-                self.blackboard.robot_ns = self.robot_selected
+                self.cubo_selected = response.cubo
+                
+                self.node.get_logger().info(f"Robot seleccionado: {self.robot_selected}, objeto: {self.cubo_selected}")
+                self.blackboard.order_info = [self.robot_selected, self.cubo_selected ]
                 return py_trees.common.Status.SUCCESS
             except Exception as e:
                 self.node.get_logger().error(f"Error al obtener respuesta: {e}")
